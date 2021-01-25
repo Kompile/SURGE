@@ -90,7 +90,7 @@ class SURGE_GenerateRamp(bpy.types.Operator):
     
     width : bpy.props.FloatProperty(name = 'Width:', description = '', default = 256, min = 64)
     height : bpy.props.FloatProperty(name = 'Height:', description = '', default = 320, min = 64)
-    smoothness : bpy.props.IntProperty(name = '', description = 'Number of segments in the ramp. Keep this to a sensible value, you can achieve the same experience with less smoothness', default = 16 , min = 3, max = 64)
+    smoothness : bpy.props.IntProperty(name = '', description = 'Number of segments in the ramp. Keep this to a sensible value, you can achieve the same experience with less smoothness', default = 16 , min = 3, max = 128)
     angle : bpy.props.FloatProperty(name = '', description = 'Angle of the ramp', default = 90, min = 0, max = 360)
     size : bpy.props.FloatProperty(name= '', description = 'Size of the ramp', default = 1024, min = 0)
     uv_scale : bpy.props.FloatProperty(name= '', description = 'Scale of the UV maps', default = 0.25, min = 0.05, max = 10, step = 5)
@@ -398,6 +398,7 @@ class SURGE_GenerateRamp(bpy.types.Operator):
             for ob in bpy.data.objects:
                 if ob.name in ("SURGEMesh.001","SURGEMesh.002","SURGEMesh.003"):
                     ob.select_set(True) 
+                    
             bpy.ops.object.join()
             bpy.ops.object.editmode_toggle()
             obj.name = self.ramp_name+'_phys'
@@ -463,15 +464,16 @@ class SURGE_GenerateRamp(bpy.types.Operator):
             
             # Separate.
             bpy.ops.mesh.separate(type = 'SELECTED')
-           
+
             if self.angle != 360:
                 # Even ramps, not looping.
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects["SURGEMesh.002"]
+                bpy.context.view_layer.objects.active = obj
+                
                 if (self.smoothness % 2) == 0:
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.object.select_all(action='DESELECT')
-                    obj = bpy.context.scene.objects["SURGEMesh.002"]
-                    bpy.context.view_layer.objects.active = obj
-                    # Select extra face and delete.
+                    # Select end faces and delete.
                     if self.surf_enum != 'Both':
                         obj.data.polygons[self.smoothness].select = True
                     else:
@@ -479,11 +481,17 @@ class SURGE_GenerateRamp(bpy.types.Operator):
                         obj.data.polygons[(self.smoothness * 2) + 1].select = True
                         obj.data.polygons[self.smoothness * 3].select = True
                         obj.data.polygons[(self.smoothness * 3) + 1].select = True
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.mesh.delete(type='FACE')
-                    bpy.ops.mesh.select_all(action='SELECT')
+                else:
+                    if self.surf_enum == 'Both':
+                        obj.data.polygons[(self.smoothness * 2) + 3].select = True
+                        obj.data.polygons[(self.smoothness * 2) + 2].select = True
+                        obj.data.polygons[(self.smoothness * 3) + 3].select = True
+                        obj.data.polygons[(self.smoothness * 3) + 4].select = True
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.mesh.delete(type='FACE')
+                bpy.ops.mesh.select_all(action='SELECT')      
             else:
-                # Odd ramps, looping.
+                # Separate the odd section for odd looping ramps.
                 if (self.smoothness % 2) != 0:
                     bpy.ops.object.editmode_toggle()                  
                     bpy.ops.object.select_all(action='DESELECT')
@@ -503,62 +511,240 @@ class SURGE_GenerateRamp(bpy.types.Operator):
                         obj.data.polygons[(self.smoothness * 3) + 2].select = True
                     bpy.ops.object.editmode_toggle()
                     bpy.ops.mesh.separate(type = 'SELECTED')
-
-            # Add faces in between.
-            bpy.ops.mesh.select_all(action='SELECT')
-            bpy.ops.mesh.edge_face_add()
-            bpy.ops.object.editmode_toggle()
-            bpy.ops.object.select_all(action='DESELECT')
             
-            if self.angle != 360:
-                # Not looping
-                obj = bpy.context.scene.objects["SURGEMesh.001"]
-            else:
-                # Looping
-                obj = bpy.context.scene.objects["SURGEMesh.002"]
-                
-            bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.editmode_toggle()
-            bpy.ops.mesh.select_all(action='SELECT')
- 
-            # Even.
-            if (self.smoothness % 2) == 0:
-                bpy.ops.mesh.edge_face_add()    
+            # If it's a double sided ramp we need to add more collision.        
+            if self.surf_enum == 'Both':
+                bpy.ops.mesh.select_all(action='DESELECT')
                 bpy.ops.object.editmode_toggle()
+                
+                # Select one side and separate it.
+                n = 2
+                for face in range (0, len(obj.data.polygons)):
+                    if face % n != 1:   
+                        obj.data.polygons[face].select = True
+                        
+                bpy.ops.object.editmode_toggle()        
+                bpy.ops.mesh.separate(type = 'SELECTED')
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.object.select_all(action='DESELECT')
+                
+                # Select the other side and do the same.
+                if self.angle != 360:
+                    obj = bpy.context.scene.objects["SURGEMesh.001"]
+                # For loops the selection is different, for odd loops we need to select the odd section too.
+                else:
+                    if (self.smoothness % 2) == 0:   
+                        obj = bpy.context.scene.objects["SURGEMesh.002"]
+                    else:
+                        obj = bpy.context.scene.objects["SURGEMesh.001"]
+                        bpy.context.view_layer.objects.active = obj
+
+                        for face in range (0, len(obj.data.polygons)):
+                            if face % n != 1:   
+                                obj.data.polygons[face].select = True
+                                
+                        bpy.ops.object.editmode_toggle()        
+                        bpy.ops.mesh.separate(type = 'SELECTED')
+                        bpy.ops.object.editmode_toggle()
+                        bpy.ops.object.select_all(action='DESELECT')
+                        obj = bpy.context.scene.objects["SURGEMesh.003"]
+       
+                bpy.context.view_layer.objects.active = obj
+
+                for face in range (0, len(obj.data.polygons)):
+                    if face % n != 1:   
+                        obj.data.polygons[face].select = True
+                        
+                bpy.ops.object.editmode_toggle()        
+                bpy.ops.mesh.separate(type = 'SELECTED') 
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects["SURGEMesh.001"]     
+                bpy.context.view_layer.objects.active = obj
+                     
+                # Now we have multiple objects 'SURGEMesh.001 - 006'.
+                # Go through each and select the top edges and add faces to them.
+
+                n = 4
+                def add_faces (): 
+                    if (self.smoothness % 2) == 0:
+                        for edge in range (0, self.smoothness * 2):
+                            if edge % n == 2:     
+                                obj.data.edges[edge].select = True
+                                obj.data.edges[edge + self.smoothness * 2].select = True
+                                bpy.ops.object.editmode_toggle()    
+                                bpy.ops.mesh.edge_face_add()           
+                                bpy.ops.mesh.select_all(action='DESELECT') 
+                                bpy.ops.object.editmode_toggle() 
+                    else:
+                        for edge in range (0, (self.smoothness * 2)):
+                            if edge % n == 2:     
+                                obj.data.edges[edge].select = True
+                                obj.data.edges[edge + (self.smoothness * 2) - 2].select = True
+                                bpy.ops.object.editmode_toggle()    
+                                bpy.ops.mesh.edge_face_add()           
+                                bpy.ops.mesh.select_all(action='DESELECT') 
+                                bpy.ops.object.editmode_toggle()            
+                    return {'FINISHED'}
+              
+                add_faces()
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects["SURGEMesh.002"]
+                bpy.context.view_layer.objects.active = obj
+                
+                def add_faces_loop():
+                    if self.angle != 360:
+                        if (self.smoothness % 2) == 0:
+                            add_faces()    
+                        else:
+                            # Odd ramps have objects of even and odd faces, check that.
+                            if obj.name == 'SURGEMesh.002':
+                                for edge in range (0, (self.smoothness * 2) + 2):
+                                    if edge % n == 2:  
+                                        obj.data.edges[edge].select = True
+                                        obj.data.edges[(self.smoothness * 2 + edge) + 2].select = True
+                                        bpy.ops.object.editmode_toggle()    
+                                        bpy.ops.mesh.edge_face_add()           
+                                        bpy.ops.mesh.select_all(action='DESELECT') 
+                                        bpy.ops.object.editmode_toggle()
+                            elif obj.name == 'SURGEMesh.004':
+                                for edge in range (0, self.smoothness * 2):
+                                    if edge % n == 2:  
+                                        obj.data.edges[edge].select = True
+                                        obj.data.edges[self.smoothness * 2 + edge - 2].select = True
+                                        bpy.ops.object.editmode_toggle()    
+                                        bpy.ops.mesh.edge_face_add()           
+                                        bpy.ops.mesh.select_all(action='DESELECT') 
+                                        bpy.ops.object.editmode_toggle()          
+                    # If the ramp is looping we need to select the very last two edges differently.
+                    # Objects SURGEMesh.002 and SURGEMesh.004 for whatever reason have last edges
+                    # which have an even index, not odd like all the others.                 
+                    else:
+                        if (self.smoothness % 2) == 0:
+                            count = 0
+                            limit = (self.smoothness / 2) - 1
+                            for edge in range (0, self.smoothness * 2):
+                                if count < limit:
+                                    if edge % n == 3:
+                                        obj.data.edges[edge].select = True
+                                        obj.data.edges[self.smoothness * 2 + edge].select = True
+                                        count = count + 1
+                                        bpy.ops.object.editmode_toggle()    
+                                        bpy.ops.mesh.edge_face_add()           
+                                        bpy.ops.mesh.select_all(action='DESELECT') 
+                                        bpy.ops.object.editmode_toggle() 
+                                else:
+                                    if edge % n == 2:
+                                        obj.data.edges[edge].select = True
+                                        obj.data.edges[self.smoothness * 2 + edge].select = True
+                                        bpy.ops.object.editmode_toggle()    
+                                        bpy.ops.mesh.edge_face_add()           
+                                        bpy.ops.mesh.select_all(action='DESELECT') 
+                                        bpy.ops.object.editmode_toggle() 
+                        else:
+                            for edge in range (0, self.smoothness * 2):
+                                if edge % n == 2:
+                                    obj.data.edges[edge].select = True
+                                    obj.data.edges[(self.smoothness * 2) + edge - 2].select = True
+                                    bpy.ops.object.editmode_toggle()    
+                                    bpy.ops.mesh.edge_face_add()           
+                                    bpy.ops.mesh.select_all(action='DESELECT') 
+                                    bpy.ops.object.editmode_toggle()
+                             
+                add_faces_loop()
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects["SURGEMesh.003"]
+                bpy.context.view_layer.objects.active = obj
+
+                if (self.smoothness % 2) == 0:
+                    add_faces()    
+                else:
+                    if self.angle != 360:
+                        for edge in range (0, (self.smoothness * 2) + 2):
+                            if edge % n == 2:  
+                                obj.data.edges[edge].select = True
+                                obj.data.edges[(self.smoothness * 2 + edge) + 2].select = True
+                                bpy.ops.object.editmode_toggle()    
+                                bpy.ops.mesh.edge_face_add()           
+                                bpy.ops.mesh.select_all(action='DESELECT') 
+                                bpy.ops.object.editmode_toggle()
+                    else:
+                        # Odd section in loop.
+                        obj.data.edges[2].select = True 
+                        obj.data.edges[6].select = True
+                        bpy.ops.object.editmode_toggle()    
+                        bpy.ops.mesh.edge_face_add()           
+                        bpy.ops.mesh.select_all(action='DESELECT') 
+                        bpy.ops.object.editmode_toggle()    
+
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects["SURGEMesh.004"]
+                bpy.context.view_layer.objects.active = obj
+                
+                # If an odd loop, select additional objects.
+                if self.angle == 360:
+                    add_faces_loop()
+                    if (self.smoothness % 2) != 0:
+                        bpy.ops.object.select_all(action='DESELECT')
+                        obj = bpy.context.scene.objects["SURGEMesh.005"]
+                        bpy.context.view_layer.objects.active = obj
+                        add_faces_loop()
+                        
+                        bpy.ops.object.select_all(action='DESELECT')
+                        obj = bpy.context.scene.objects["SURGEMesh.006"]
+                        bpy.context.view_layer.objects.active = obj
+                        
+                        obj.data.edges[2].select = True 
+                        obj.data.edges[6].select = True
+                        bpy.ops.object.editmode_toggle()    
+                        bpy.ops.mesh.edge_face_add()           
+                        bpy.ops.mesh.select_all(action='DESELECT') 
+                        bpy.ops.object.editmode_toggle()
+                    else:
+                        add_faces_loop()
+                else:
+                    add_faces_loop()   
+            
+            def add_faces_between (str):
+                bpy.ops.object.select_all(action='DESELECT')
+                obj = bpy.context.scene.objects[str]
+                bpy.context.view_layer.objects.active = obj
+                bpy.ops.object.editmode_toggle()
+                bpy.ops.mesh.select_all(action='SELECT')
+                bpy.ops.mesh.edge_face_add()
+                bpy.ops.object.editmode_toggle()
+
+            # Add faces in between each object.            
+            if self.surf_enum == 'Both':  
+                add_faces_between("SURGEMesh.001")    
+                add_faces_between("SURGEMesh.002")
+                add_faces_between("SURGEMesh.003")
+                add_faces_between("SURGEMesh.004")
+                if self.angle == 360 and (self.smoothness % 2) != 0:
+                    add_faces_between("SURGEMesh.005")
+                    add_faces_between("SURGEMesh.006")
             else:
-                # Odd, not looping.
                 if self.angle != 360:
                     bpy.ops.object.editmode_toggle()
-                    bpy.ops.object.select_all(action='DESELECT')
-                    obj = bpy.context.scene.objects["SURGEMesh.002"]
-                    bpy.context.view_layer.objects.active = obj
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    bpy.ops.mesh.edge_face_add()
-                    bpy.ops.object.editmode_toggle()
-                # Odd, looping.
+                    add_faces_between("SURGEMesh.001")
+                    add_faces_between("SURGEMesh.002")
                 else:
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.object.select_all(action='DESELECT')
-                    obj = bpy.context.scene.objects["SURGEMesh.001"]
-                    bpy.context.view_layer.objects.active = obj
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    bpy.ops.mesh.edge_face_add()
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.object.select_all(action='DESELECT')
-                    obj = bpy.context.scene.objects["SURGEMesh.003"]
-                    bpy.context.view_layer.objects.active = obj
-                    bpy.ops.object.editmode_toggle()
-                    bpy.ops.mesh.select_all(action='SELECT')
-                    bpy.ops.mesh.edge_face_add()
-                    bpy.ops.object.editmode_toggle()
-                
+                    if (self.smoothness % 2) == 0:
+                        bpy.ops.object.editmode_toggle()
+                        add_faces_between("SURGEMesh.001")
+                        add_faces_between("SURGEMesh.002")
+                    else:
+                        bpy.ops.object.editmode_toggle()
+                        add_faces_between("SURGEMesh.001")
+                        add_faces_between("SURGEMesh.002")
+                        add_faces_between("SURGEMesh.003")
+                                   
             # Select and join together.
             for ob in bpy.data.objects:
-                if ob.name in ("SURGEMesh.001","SURGEMesh.002","SURGEMesh.003"):
+                if ob.name in ("SURGEMesh.001","SURGEMesh.002","SURGEMesh.003","SURGEMesh.004","SURGEMesh.005","SURGEMesh.006"):
                     ob.select_set(True) 
 
+            obj = bpy.context.view_layer.objects.active
             bpy.ops.object.join()
             bpy.ops.object.editmode_toggle()
             obj.name = self.ramp_name+'_phys'
