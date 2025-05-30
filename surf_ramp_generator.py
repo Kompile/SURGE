@@ -333,8 +333,8 @@ class SURGE_GenerateRamp(bpy.types.Operator):
         bpy.ops.mesh.normals_make_consistent(inside=False)
         bpy.ops.object.editmode_toggle()                
         bpy.ops.object.shade_smooth()
-        bpy.context.object.data.use_auto_smooth = True
-        bpy.context.object.data.auto_smooth_angle = 0.785398
+        if hasattr(bpy.context.object.data, "use_smooth"):
+            bpy.context.object.data.use_smooth = True
         bpy.context.scene.cursor.location = self.cursor_start
         bpy.ops.view3d.snap_selected_to_cursor(use_offset=True)
         
@@ -346,7 +346,8 @@ class SURGE_GenerateRamp(bpy.types.Operator):
         bpy.ops.object.duplicate_move(OBJECT_OT_duplicate={"linked":False, "mode":'TRANSLATION'}, TRANSFORM_OT_translate={"value":(0, 0, 0), "orient_type":'GLOBAL', "orient_matrix":((0, 0, 0), (0, 0, 0), (0, 0, 0)), "orient_matrix_type":'GLOBAL', "constraint_axis":(False, False, False), "mirror":False, "use_proportional_edit":False, "proportional_edit_falloff":'SMOOTH', "proportional_size":1, "use_proportional_connected":False, "use_proportional_projected":False, "snap":False, "snap_target":'CLOSEST', "snap_point":(0, 0, 0), "snap_align":False, "snap_normal":(0, 0, 0), "gpencil_strokes":False, "cursor_transform":False, "texture_space":False, "remove_on_cancel":False, "release_confirm":False, "use_accurate":False, "use_automerge_and_split":False})
         obj = bpy.context.active_object
         bpy.ops.object.editmode_toggle()
-        bpy.context.object.data.use_auto_smooth = False
+        if hasattr(bpy.context.object.data, "use_smooth"):
+            bpy.context.object.data.use_smooth = False
         bpy.ops.mesh.select_mode(type="FACE")
         bpy.ops.mesh.select_all(action = 'DESELECT')
         bpy.ops.object.editmode_toggle()
@@ -829,7 +830,7 @@ class SURGE_GenerateRamp(bpy.types.Operator):
             else:
                 obj.data.polygons[0].select = True  
             bpy.ops.object.editmode_toggle()
-            bpy.ops.mesh.select_similar(type='AREA', threshold=1)         
+            bpy.ops.mesh.select_similar(type='FACE_AREA', threshold=1)         
         else:
             if self.surf_enum != 'Both':
                 for face in range(0, self.smoothness):
