@@ -1,8 +1,8 @@
 bl_info = {
     "name": "SURGE",
     "author": "Kompile",
-    "version": (1, 0),
-    "blender": (2, 91, 0),
+    "version": (1, 1),
+    "blender": (4, 4, 3),
     "location": "View3D > Sidebar",
     "description": "Generates surf ramps for source engine games",
     "category": "Add Mesh",
